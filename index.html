@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>VANTAGE — a daily perspective puzzle</title>
+<meta name="description" content="150+ floating blocks look like chaos — until you find the one secret angle where they align into a picture. New puzzle every day.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>◇</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #06070c;
+    --ink: #e8ebf2;
+    --dim: #8a92a6;
+    --amber: #ffb345;
+    --panel: rgba(16, 19, 28, 0.88);
+    --line: rgba(255, 255, 255, 0.08);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    height: 100%;
+    overflow: hidden;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: 'Space Grotesk', system-ui, -apple-system, sans-serif;
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  #scene {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    display: block;
+    touch-action: none;
+    cursor: grab;
+  }
+  #scene.dragging { cursor: grabbing; }
+  /* vignette */
+  body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    background: radial-gradient(ellipse at 50% 45%, transparent 50%, rgba(0,0,0,0.55) 100%);
+  }
+
+  .hud { position: fixed; z-index: 10; }
+  #topbar {
+    top: 0; left: 0; right: 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 18px 22px;
+    pointer-events: none;
+  }
+  #wordmark {
+    font-weight: 700;
+    letter-spacing: 0.32em;
+    font-size: 15px;
+  }
+  #wordmark .diamond { color: var(--amber); }
+  #puzzleno { color: var(--dim); font-weight: 400; letter-spacing: 0.1em; margin-left: 8px; font-size: 13px; }
+  #timer {
+    font-variant-numeric: tabular-nums;
+    font-size: 15px;
+    letter-spacing: 0.12em;
+    color: var(--dim);
+  }
+
+  #signalwrap {
+    bottom: 26px; left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 7px;
+    pointer-events: none;
+  }
+  #signallabel {
+    font-size: 10px;
+    letter-spacing: 0.34em;
+    color: var(--dim);
+    text-transform: uppercase;
+  }
+  #signalbar {
+    width: 190px; height: 4px;
+    border-radius: 2px;
+    background: rgba(255,255,255,0.09);
+    overflow: hidden;
+  }
+  #signalfill {
+    height: 100%; width: 0%;
+    border-radius: 2px;
+    background: #4a6fa5;
+    transition: width 0.12s linear, background-color 0.25s;
+  }
+
+  #hintbtn {
+    bottom: 22px; right: 22px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    color: var(--ink);
+    font-family: inherit;
+    font-size: 13px;
+    letter-spacing: 0.06em;
+    padding: 11px 18px;
+    border-radius: 999px;
+    cursor: pointer;
+    backdrop-filter: blur(8px);
+    transition: border-color 0.25s, transform 0.15s;
+  }
+  #hintbtn:hover { border-color: rgba(255, 179, 69, 0.5); }
+  #hintbtn:active { transform: scale(0.96); }
+  #hintbtn.pulse { animation: pulse 1.6s ease-in-out infinite; }
+  #hintbtn:disabled { opacity: 0.35; cursor: default; }
+  @keyframes pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(255,179,69,0); }
+    50% { box-shadow: 0 0 0 8px rgba(255,179,69,0.12); border-color: rgba(255,179,69,0.6); }
+  }
+
+  /* modal cards */
+  .card-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 20;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(3, 4, 8, 0.55);
+    backdrop-filter: blur(3px);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.45s;
+  }
+  .card-backdrop.show { opacity: 1; pointer-events: auto; }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 20px;
+    padding: 34px 34px 28px;
+    max-width: 350px;
+    width: calc(100% - 48px);
+    text-align: center;
+    backdrop-filter: blur(16px);
+    box-shadow: 0 24px 80px rgba(0,0,0,0.6);
+    transform: translateY(12px);
+    transition: transform 0.45s cubic-bezier(0.2, 0.9, 0.3, 1);
+  }
+  .card-backdrop.show .card { transform: translateY(0); }
+  .card h1 {
+    font-size: 20px;
+    letter-spacing: 0.3em;
+    font-weight: 700;
+    margin-bottom: 4px;
+  }
+  .card h1 .diamond { color: var(--amber); }
+  .card .sub { color: var(--dim); font-size: 13.5px; line-height: 1.65; margin: 14px 0 20px; }
+  .card .sub b { color: var(--ink); font-weight: 500; }
+  .card .bigemoji { font-size: 64px; line-height: 1.15; margin: 6px 0 2px; }
+  .card .answername {
+    font-size: 15px;
+    letter-spacing: 0.24em;
+    text-transform: uppercase;
+    color: var(--amber);
+    margin-bottom: 16px;
+  }
+  .statrow {
+    display: flex;
+    justify-content: center;
+    gap: 28px;
+    margin: 6px 0 20px;
+  }
+  .stat .v { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .stat .k { font-size: 10px; letter-spacing: 0.22em; color: var(--dim); text-transform: uppercase; margin-top: 3px; }
+  .btn {
+    display: inline-block;
+    font-family: inherit;
+    font-size: 13.5px;
+    letter-spacing: 0.08em;
+    padding: 13px 26px;
+    border-radius: 999px;
+    border: none;
+    cursor: pointer;
+    margin: 4px 3px;
+    transition: transform 0.15s, opacity 0.2s;
+  }
+  .btn:active { transform: scale(0.96); }
+  .btn-amber { background: var(--amber); color: #1a1205; font-weight: 700; }
+  .btn-ghost { background: transparent; color: var(--ink); border: 1px solid var(--line); }
+  .btn-ghost:hover { border-color: rgba(255,255,255,0.25); }
+  #countdown { font-size: 11.5px; color: var(--dim); letter-spacing: 0.08em; margin-top: 14px; font-variant-numeric: tabular-nums; }
+  #sharefeedback { font-size: 11.5px; color: var(--amber); letter-spacing: 0.08em; margin-top: 10px; min-height: 14px; }
+
+  #toast {
+    position: fixed;
+    top: 64px; left: 50%;
+    transform: translateX(-50%);
+    z-index: 15;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 9px 20px;
+    font-size: 12.5px;
+    letter-spacing: 0.08em;
+    color: var(--dim);
+    opacity: 0;
+    transition: opacity 0.4s;
+    pointer-events: none;
+    backdrop-filter: blur(8px);
+  }
+  #toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+<canvas id="scene"></canvas>
+
+<div class="hud" id="topbar">
+  <div id="wordmark">VANTAGE<span class="diamond"> ◇</span><span id="puzzleno"></span></div>
+  <div id="timer">0:00</div>
+</div>
+
+<div class="hud" id="signalwrap">
+  <div id="signalbar"><div id="signalfill"></div></div>
+  <div id="signallabel">signal</div>
+</div>
+
+<button class="hud" id="hintbtn">💡 Hint · <span id="hintsleft">3</span></button>
+
+<div id="toast"></div>
+
+<!-- intro -->
+<div class="card-backdrop" id="intro">
+  <div class="card">
+    <h1>VANTAGE<span class="diamond"> ◇</span></h1>
+    <div class="sub">
+      These blocks look like chaos — but from exactly
+      <b>one secret angle</b> they align into a picture.<br><br>
+      <b>Drag</b> to orbit. The blocks glow <b style="color:var(--amber)">warmer</b>
+      as you close in. Find the vantage point.
+    </div>
+    <button class="btn btn-amber" id="startbtn">Start hunting</button>
+  </div>
+</div>
+
+<!-- solved -->
+<div class="card-backdrop" id="solved">
+  <div class="card">
+    <div class="bigemoji" id="answeremoji"></div>
+    <div class="answername" id="answername"></div>
+    <div class="statrow">
+      <div class="stat"><div class="v" id="stat-time">–</div><div class="k">time</div></div>
+      <div class="stat"><div class="v" id="stat-hints">–</div><div class="k">hints</div></div>
+      <div class="stat"><div class="v" id="stat-streak">–</div><div class="k">streak</div></div>
+    </div>
+    <button class="btn btn-amber" id="sharebtn">Share result</button>
+    <button class="btn btn-ghost" id="admirebtn">Admire</button>
+    <button class="btn btn-ghost" id="endlessbtn">Endless mode</button>
+    <div id="sharefeedback"></div>
+    <div id="countdown"></div>
+  </div>
+</div>
+
+<script type="module" src="main.js"></script>
+</body>
+</html>
